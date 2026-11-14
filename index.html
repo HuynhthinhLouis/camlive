@@ -322,7 +322,8 @@ function watchPc(label,call,onFail){
         if(pair){
           var l=cands[pair.localCandidateId],r2=cands[pair.remoteCandidateId];
           var t=(l&&l.candidateType)||'?',u=(r2&&r2.candidateType)||'?';
-          log(label+' đường truyền: '+t+' ↔ '+u+((t==='relay'||u==='relay')?' (đi vòng qua máy chủ TURN, có thể bị giới hạn tốc độ)':' (trực tiếp)'));
+          var proto=(l&&(l.relayProtocol||l.protocol))||'?';
+          log(label+' đường truyền: '+t+' ↔ '+u+' qua '+String(proto).toUpperCase()+((t==='relay'||u==='relay')?' (đi vòng qua máy chủ TURN, có thể bị giới hạn tốc độ)':' (trực tiếp)'));
         }
       }).catch(function(){});
     }
