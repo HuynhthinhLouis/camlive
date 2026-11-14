@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LiveCam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0d12; --bg2:#10131b; --card:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
+  --fg:#eef1f7; --mut:#8b93a7; --acc:#4f8cff; --acc2:#7c5cff; --ok:#2ecc8f; --bad:#ff5d6c; --warn:#ffb020;
+  --font:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  font-family:var(--font);color:var(--fg);background:var(--bg);
+  background-image:radial-gradient(900px 500px at 10% -10%,rgba(79,140,255,.18),transparent 60%),
+                   radial-gradient(800px 500px at 100% 0%,rgba(124,92,255,.14),transparent 60%);
+  background-attachment:fixed;line-height:1.5;-webkit-font-smoothing:antialiased;
+  padding:env(safe-area-inset-top) max(16px,env(safe-area-inset-right)) calc(40px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+}
+.wrap{max-width:1180px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0 18px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.01em}
+.logo i{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:grid;place-items:center;box-shadow:0 6px 24px rgba(79,140,255,.35)}
+.logo svg{width:18px;height:18px;fill:#fff}
+.chan{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+.chan input{width:150px;font-family:var(--mono);font-size:13px;text-transform:none;letter-spacing:0;padding:7px 10px}
+.tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.tabs button{font:inherit;font-weight:600;font-size:14px;color:var(--mut);background:none;border:0;padding:8px 18px;border-radius:9px;cursor:pointer}
+.tabs button[aria-selected=true]{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#fff}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.stage{position:relative;background:#000;border:1px solid var(--line);border-radius:18px;overflow:hidden;aspect-ratio:16/9;max-width:100%}
+.stage video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--mut);padding:16px;font-size:14px;pointer-events:none}
+.ph svg{width:40px;height:40px;fill:none;stroke:var(--mut);stroke-width:1.5;margin:0 auto 8px;display:block}
+.badge{position:absolute;top:12px;left:12px;display:none;align-items:center;gap:7px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);padding:6px 11px;border-radius:99px;font-size:12px;font-weight:600;letter-spacing:.04em}
+.badge.on{display:flex}
+.badge b{width:8px;height:8px;border-radius:50%;background:var(--bad);animation:p 1.4s infinite}
+@keyframes p{50%{opacity:.3}}
+@media(prefers-reduced-motion:reduce){.badge b{animation:none}}
+.hud{position:absolute;right:10px;top:10px;font-family:var(--mono);font-size:11.5px;line-height:1.45;white-space:pre;text-align:right;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);padding:6px 9px;border-radius:8px;display:none;max-width:70%}
+.hud.on{display:block}
+.hud.low{color:var(--warn)}
+/* sender controls on stage */
+.ctl{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;padding:14px;background:linear-gradient(transparent,rgba(0,0,0,.6))}
+.rb{width:48px;height:48px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(20,24,34,.6);backdrop-filter:blur(10px);color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+.rb:active{transform:scale(.94)}
+.ic{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.go{width:64px;height:64px;border-radius:50%;border:3px solid #fff;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0}
+.go i{width:46px;height:46px;border-radius:50%;background:var(--bad);transition:all .2s}
+.go.live i{width:24px;height:24px;border-radius:6px}
+.sheet{position:absolute;left:12px;bottom:84px;background:rgba(14,17,25,.92);backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:14px;padding:6px;min-width:200px;max-width:calc(100% - 24px);max-height:60%;overflow:auto;z-index:5}
+.sheet button{display:flex;width:100%;gap:8px;align-items:center;text-align:left;font:inherit;font-size:13px;color:var(--fg);background:none;border:0;padding:9px 10px;border-radius:9px;cursor:pointer}
+.sheet button[aria-current=true]{background:rgba(79,140,255,.22)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:13px;min-width:0}
+.panel h2{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);font-weight:600}
+label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--mut)}
+select,input[type=text],input:not([type]){font:inherit;color:var(--fg);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;width:100%}
+select:focus-visible,input:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pills{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pills button{font:inherit;font-weight:600;font-size:13px;color:var(--mut);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 0;cursor:pointer}
+.pills button[aria-pressed=true]{color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2));border-color:transparent}
+.pills button:disabled{opacity:.45;cursor:not-allowed}
+.btn{font:inherit;font-weight:600;font-size:15px;border:0;border-radius:12px;padding:13px 16px;cursor:pointer;color:#fff;background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 8px 24px rgba(79,140,255,.3)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.stop{background:var(--bad);box-shadow:0 8px 24px rgba(255,93,108,.28)}
+.btn.ghost{background:var(--card);border:1px solid var(--line);box-shadow:none;color:var(--fg);font-size:13px;padding:9px 12px}
+.copy{display:flex;gap:8px}
+.copy input{font-family:var(--mono);font-size:12px}
+.copy button{flex:none}
+.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
+.chk input{width:auto}
+.status{font-size:13px;color:var(--mut);display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mut);flex:none}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+.warn{display:none;font-size:12.5px;color:var(--warn);background:rgba(255,176,32,.1);border:1px solid rgba(255,176,32,.3);border-radius:10px;padding:9px 11px}
+.warn.on{display:block}
+.note{font-size:12px;color:var(--mut)}
+/* receiver */
+.wbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tiles.focus{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tiles.focus .tile.big{grid-column:1/-1}
+.tile{position:relative;background:#000;border:1px solid var(--line);border-radius:14px;overflow:hidden;aspect-ratio:16/9;cursor:pointer;min-width:0}
+.tile video{width:100%;height:100%;object-fit:contain;display:block;background:#000}
+.tile[data-state=live] .ph{display:none}
+.tile .tag{position:absolute;left:8px;top:8px;display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);padding:4px 9px;border-radius:99px}
+.tile .tag i{width:7px;height:7px;border-radius:50%;background:var(--mut)}
+.tile[data-state=live] .tag i{background:var(--ok)}
+.tile[data-state=connecting] .tag i{background:var(--warn)}
+.tile .tag em{font-style:normal;color:var(--mut);font-weight:500}
+.tile .hud{top:auto;bottom:8px;right:8px;font-size:11px}
+.tile[data-state=live] .hud{display:block}
+.tb{position:absolute;right:8px;top:8px;display:flex;gap:6px}
+.tb button{width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.18);background:rgba(20,24,34,.6);backdrop-filter:blur(8px);color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+.tb .ic{width:16px;height:16px}
+.tile:fullscreen{border-radius:0;aspect-ratio:auto}
+.links{margin-top:14px}
+.links summary{cursor:pointer;font-weight:600;font-size:14px}
+.lrow{display:flex;gap:8px;align-items:center;margin-top:8px}
+.lrow b{font-size:12px;width:48px;flex:none}
+.lrow input{font-family:var(--mono);font-size:11.5px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(20,24,34,.95);border:1px solid var(--line);padding:10px 16px;border-radius:12px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;max-width:90vw}
+.toast.on{opacity:1}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><i><svg viewBox="0 0 24 24"><path d="M17 10.5V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3.5l5 4v-11z"/></svg></i>LiveCam</div>
+    <label class="chan">Kênh <input id="ch" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Mã kênh ghép nối"></label>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabSend" aria-selected="true">Phát camera</button>
+      <button role="tab" id="tabWatch" aria-selected="false">Xem 4 camera</button>
+    </div>
+  </header>
+
+  <!-- ===== PHÁT ===== -->
+  <main class="grid" id="viewSend">
+    <section class="stage" id="stageSend">
+      <video id="local" autoplay muted playsinline></video>
+      <div class="ph" id="phSend"><div><svg viewBox="0 0 24 24"><path d="M15 10l5-3v10l-5-3M4 6h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>Bấm nút tròn đỏ để bật camera và phát</div></div>
+      <div class="badge" id="liveBadge"><b></b><span id="liveTxt">ĐANG PHÁT</span></div>
+      <div class="hud" id="hudSend"></div>
+      <div class="sheet" id="sheet" hidden></div>
+      <div class="ctl">
+        <button class="rb" id="btnCams" aria-label="Chọn camera"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <button class="go" id="btnGo" aria-label="Bắt đầu hoặc dừng truyền"><i></i></button>
+        <button class="rb" id="btnFlip" aria-label="Đổi camera"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-15-6.7L3 8M3 3v5h5M3 12a9 9 0 0 0 15 6.7L21 16M21 21v-5h-5"/></svg></button>
+      </div>
+    </section>
+    <aside class="panel">
+      <h2>Vị trí camera</h2>
+      <div class="pills" id="slots">
+        <button data-slot="1" aria-pressed="true">CAM 1</button><button data-slot="2" aria-pressed="false">CAM 2</button>
+        <button data-slot="3" aria-pressed="false">CAM 3</button><button data-slot="4" aria-pressed="false">CAM 4</button>
+      </div>
+      <label>Camera
+        <select id="cam"><option value="">Mặc định</option></select>
+      </label>
+      <div class="row">
+        <label>Độ phân giải
+          <select id="res"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option><option value="3840x2160">4K</option></select>
+        </label>
+        <label>Khung hình
+          <select id="fps"><option value="30">30 fps</option><option value="60" selected>60 fps</option></select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Băng thông tối đa
+          <select id="br"><option value="4000000">4 Mbps</option><option value="8000000">8 Mbps</option><option value="12000000" selected>12 Mbps</option><option value="20000000">20 Mbps</option></select>
+        </label>
+        <label>Ưu tiên
+          <select id="prio"><option value="maintain-framerate" selected>Giữ đủ fps</option><option value="maintain-resolution">Giữ độ nét</option><option value="balanced">Cân bằng</option></select>
+        </label>
+      </div>
+      <label>Âm thanh
+        <select id="aud"><option value="0" selected>Không truyền tiếng</option><option value="1">Truyền cả micro</option></select>
+      </label>
+      <label class="chk"><input type="checkbox" id="auto"> Tự phát lại khi mở trang</label>
+      <button class="btn" id="btnStart">Bắt đầu truyền</button>
+      <div class="warn" id="warn"></div>
+      <div class="status"><span class="dot" id="dotS"></span><span id="stS">Chưa phát</span></div>
+      <h2>Liên kết bên nhận</h2>
+      <div class="copy"><input id="rxLink" readonly aria-label="Liên kết bên nhận"><button class="btn ghost" id="btnCopyRx">Chép</button></div>
+      <div class="note">Bên nhận đang xem: <b id="viewers">0</b>. Giữ tab này mở trong lúc truyền.</div>
+    </aside>
+  </main>
+
+  <!-- ===== XEM ===== -->
+  <main id="viewWatch" hidden>
+    <div class="wbar">
+      <div class="status"><span class="dot" id="dotW"></span><span id="sumW">Đang kết nối…</span></div>
+      <div class="note" id="rtt"></div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <details class="panel links">
+      <summary>Liên kết mở sẵn cho từng camera phát</summary>
+      <div id="sendLinks"></div>
+    </details>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(function(){
+'use strict';
+var $=function(i){return document.getElementById(i)};
+var DEFAULT_CH='r3n8k5w2xq7d';   /* đổi chuỗi này thành mã riêng của bạn */
+var store={
+  get:function(k,d){try{var v=localStorage.getItem('lc_'+k);return v===null?d:v}catch(e){return d}},
+  set:function(k,v){try{localStorage.setItem('lc_'+k,v)}catch(e){}}
+};
+var params=new URLSearchParams(location.search);
+function clean(s){return (s||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,24)}
+var channel=clean(params.get('ch'))||clean(store.get('ch',''))||DEFAULT_CH;
+var base=location.href.split('#')[0].split('?')[0];
+function pid(n){return 'lc-'+channel+'-'+n}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+var IC_SND='<svg class="ic" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+var IC_MUTE='<svg class="ic" viewBox="0 0 24 24"><path d="M11 5L6 9H3v6h3l5 4zM22 9l-6 6M16 9l6 6"/></svg>';
+var IC_FS='<svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove('on')},2600)}
+function copyText(text,btn){
+  var done=function(){var o=btn.textContent;btn.textContent='Đã chép';setTimeout(function(){btn.textContent=o},1400)};
+  var fb=function(){var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done()}catch(e){}document.body.removeChild(ta)};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(fb)}else fb();
+}
+function setSt(dot,txt,cls,msg){$(dot).className='dot '+(cls||'');$(txt).textContent=msg}
+
+/* ---------- cài đặt được nhớ ---------- */
+['res','fps','br','prio','aud'].forEach(function(id){
+  var el=$(id),v=store.get(id,null);
+  if(v!==null&&Array.prototype.some.call(el.options,function(o){return o.value===v}))el.value=v;
+  el.addEventListener('change',function(){store.set(id,el.value)});
+});
+$('auto').checked=store.get('auto','0')==='1';
+$('auto').addEventListener('change',function(){store.set('auto',$('auto').checked?'1':'0')});
+$('ch').value=channel;
+
+/* =====================================================
+   BÊN PHÁT
+   ===================================================== */
+var S={peer:null,stream:null,vtrack:null,atrack:null,slot:1,conns:{},calls:{},active:false,starting:false,
+       cams:[],switching:false,statT:null,metaT:null,rt:null,wl:null,lastB:0,lastT:0,lastCallId:null,hint:null};
+var qs=parseInt(params.get('cam'),10);
+S.slot=(qs>=1&&qs<=4)?qs:(parseInt(store.get('slot','1'),10)||1);
+
+function renderSlots(){
+  Array.prototype.forEach.call($('slots').children,function(b){
+    b.setAttribute('aria-pressed',String(+b.dataset.slot===S.slot));
+    b.disabled=S.active||S.starting;
+  });
+  $('liveTxt').textContent='CAM '+S.slot+' · ĐANG PHÁT';
+}
+$('slots').addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b||S.active)return;
+  S.slot=+b.dataset.slot;store.set('slot',S.slot);renderSlots();
+});
+renderSlots();
+
+function renderLinks(){
+  $('rxLink').value=base+'?role=watch&ch='+channel;
+  var h='';
+  for(var n=1;n<=4;n++){h+='<div class="lrow"><b>CAM '+n+'</b><input readonly value="'+esc(base+'?role=send&cam='+n+'&ch='+channel)+'" aria-label="Liên kết CAM '+n+'"><button class="btn ghost" data-copy="'+n+'">Chép</button></div>'}
+  $('sendLinks').innerHTML=h;
+}
+$('sendLinks').addEventListener('click',function(e){
+  var b=e.target.closest('button[data-copy]');if(!b)return;
+  copyText(base+'?role=send&cam='+b.dataset.copy+'&ch='+channel,b);
+});
+$('btnCopyRx').onclick=function(){copyText($('rxLink').value,$('btnCopyRx'))};
+
+function getVideo(deviceId){
+  var wh=$('res').value.split('x'),fps=+$('fps').value;
+  var v={width:{ideal:+wh[0]},height:{ideal:+wh[1]},frameRate:{ideal:fps}};
+  if(deviceId)v.deviceId={exact:deviceId};
+  return navigator.mediaDevices.getUserMedia({video:v}).then(function(s){return s.getVideoTracks()[0]});
+}
+function applyHint(t){
+  var p=$('prio').value;
+  if(t&&'contentHint' in t)t.contentHint=p==='maintain-framerate'?'motion':(p==='maintain-resolution'?'detail':'');
+}
+function buildStream(){
+  var tr=[S.vtrack];if(S.atrack)tr.push(S.atrack);
+  S.stream=new MediaStream(tr);
+  var v=$('local');v.srcObject=S.stream;
+  var st=S.vtrack.getSettings();
+  v.style.transform=(st.facingMode==='user')?'scaleX(-1)':'';
+  S.vtrack.onended=function(){if(S.active)setSt('dotS','stS','bad','Camera bị ngắt, hãy đổi camera hoặc bắt đầu lại')};
+}
+function curId(){return S.vtrack?(S.vtrack.getSettings().deviceId||''):$('cam').value}
+
+function refreshCams(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.enumerateDevices)return Promise.resolve();
+  return navigator.mediaDevices.enumerateDevices().then(function(d){
+    S.cams=d.filter(function(x){return x.kind==='videoinput'});
+    var cur=curId(),sel=$('cam');
+    sel.innerHTML='<option value="">Mặc định</option>'+S.cams.map(function(c,i){return '<option value="'+esc(c.deviceId)+'">'+esc(c.label||('Camera '+(i+1)))+'</option>'}).join('');
+    sel.value=cur;if(sel.value!==cur)sel.value='';
+    renderSheet();
+  }).catch(function(){});
+}
+function renderSheet(){
+  var cur=curId();
+  $('sheet').innerHTML=S.cams.length?S.cams.map(function(c,i){
+    return '<button data-id="'+esc(c.deviceId)+'" aria-current="'+(c.deviceId===cur)+'">'+esc(c.label||('Camera '+(i+1)))+'</button>';
+  }).join(''):'<button disabled>Chưa thấy camera nào</button>';
+}
+if(navigator.mediaDevices&&navigator.mediaDevices.addEventListener)navigator.mediaDevices.addEventListener('devicechange',refreshCams);
+
+function pickCam(id){
+  $('sheet').hidden=true;
+  if(S.vtrack)switchTo(id);else{$('cam').value=id;renderSheet()}
+}
+$('btnCams').onclick=function(){
+  if(!S.cams.length)refreshCams();
+  renderSheet();$('sheet').hidden=!$('sheet').hidden;
+};
+$('sheet').addEventListener('click',function(e){var b=e.target.closest('button[data-id]');if(b)pickCam(b.dataset.id)});
+document.addEventListener('click',function(e){if(!$('sheet').hidden&&!e.target.closest('#sheet')&&!e.target.closest('#btnCams'))$('sheet').hidden=true});
+$('btnFlip').onclick=function(){
+  if(S.cams.length<2){toast('Thiết bị này chỉ có 1 camera');return}
+  var cur=curId(),i=S.cams.findIndex(function(c){return c.deviceId===cur});
+  pickCam(S.cams[(i+1)%S.cams.length].deviceId);
+};
+$('cam').addEventListener('change',function(){if(S.vtrack&&$('cam').value)switchTo($('cam').value)});
+
+function forEachVideoSender(fn){
+  Object.keys(S.calls).forEach(function(k){
+    var pc=S.calls[k].peerConnection;if(!pc)return;
+    pc.getSenders().forEach(function(s){if(s.track&&s.track.kind==='video')fn(s)});
+  });
+}
+function switchTo(id){
+  if(S.switching||!S.vtrack)return;
+  S.switching=true;
+  var prev=curId(),old=S.vtrack;
+  old.onended=null;old.stop();
+  setSt('dotS','stS','ok','Đang đổi camera…');
+  getVideo(id).catch(function(){
+    toast('Không mở được camera này, quay lại camera cũ');
+    return getVideo(prev);
+  }).then(function(nt){
+    S.vtrack=nt;applyHint(nt);buildStream();
+    forEachVideoSender(function(s){s.replaceTrack(nt).catch(function(){})});
+    $('cam').value=curId();refreshCams();broadcastMeta();
+    setSt('dotS','stS','ok','Đang phát CAM '+S.slot);
+  }).catch(function(){
+    setSt('dotS','stS','bad','Không đổi được camera. Hãy bấm bắt đầu lại.');
+  }).then(function(){S.switching=false});
+}
+['res','fps'].forEach(function(id){$(id).addEventListener('change',function(){if(S.vtrack)switchTo(curId())})});
+['br','fps','prio'].forEach(function(id){$(id).addEventListener('change',function(){
+  applyHint(S.vtrack);forEachVideoSender(applyParams);
+})});
+
+function applyParams(s){
+  var p=s.getParameters();
+  if(!p.encodings||!p.encodings.length)return Promise.resolve(false);
+  var e=p.encodings[0];
+  e.maxBitrate=+$('br').value;e.maxFramerate=+$('fps').value;e.scaleResolutionDownBy=1;
+  p.degradationPreference=$('prio').value;
+  return s.setParameters(p).then(function(){return true}).catch(function(){return false});
+}
+function tuneSender(call){
+  var n=0,t=setInterval(function(){
+    n++;var pc=call.peerConnection;
+    if(pc){
+      var ss=pc.getSenders().filter(function(s){return s.track&&s.track.kind==='video'});
+      if(ss.length){Promise.all(ss.map(applyParams)).then(function(r){if(r.every(Boolean))clearInterval(t)})}
+    }
+    if(n>40)clearInterval(t);
+  },400);
+}
+function metaObj(){
+  var s=S.vtrack?S.vtrack.getSettings():{};
+  return {t:'meta',w:s.width||0,h:s.height||0,fps:Math.round(s.frameRate||0),slot:S.slot};
+}
+function broadcastMeta(){Object.keys(S.conns).forEach(function(k){try{S.conns[k].send(metaObj())}catch(e){}})}
+function updViewers(){$('viewers').textContent=Object.keys(S.calls).length}
+
+function onViewer(conn){
+  var vid=conn.peer;
+  if(S.calls[vid]){try{S.calls[vid].close()}catch(e){}delete S.calls[vid]}
+  S.conns[vid]=conn;
+  if(!S.stream||!S.peer)return;
+  var call=S.peer.call(vid,S.stream);
+  S.calls[vid]=call;
+  var end=function(){if(S.calls[vid]===call){delete S.calls[vid];updViewers()}};
+  call.on('close',end);call.on('error',end);
+  tuneSender(call);
+  try{conn.send(metaObj())}catch(e){}
+  updViewers();
+  setSt('dotS','stS','ok','Đang truyền CAM '+S.slot+' tới bên nhận');
+}
+function dropViewer(conn){
+  var vid=conn.peer;
+  if(S.conns[vid]!==conn)return;
+  delete S.conns[vid];
+  if(S.calls[vid]){try{S.calls[vid].close()}catch(e){}delete S.calls[vid]}
+  updViewers();
+  if(!Object.keys(S.calls).length&&S.active)setSt('dotS','stS','ok','Đang phát CAM '+S.slot+', chờ bên nhận…');
+}
+function retryPeer(msg){
+  if(!S.active)return;
+  try{if(S.peer)S.peer.destroy()}catch(e){}
+  S.peer=null;S.calls={};S.conns={};updViewers();
+  setSt('dotS','stS','bad',msg);
+  clearTimeout(S.rt);
+  S.rt=setTimeout(function(){if(S.active&&!S.peer)openPeer()},3000);
+}
+function openPeer(){
+  var p=new Peer(pid(S.slot),{debug:0});S.peer=p;
+  p.on('open',function(){setSt('dotS','stS','ok','Đang phát CAM '+S.slot+', chờ bên nhận…')});
+  p.on('connection',function(conn){
+    conn.on('open',function(){onViewer(conn)});
+    conn.on('close',function(){dropViewer(conn)});
+    conn.on('error',function(){dropViewer(conn)});
+  });
+  p.on('disconnected',function(){try{p.reconnect()}catch(e){}});
+  p.on('error',function(e){
+    if(e.type==='unavailable-id')retryPeer('CAM '+S.slot+' đang bị thiết bị khác giữ chỗ, đang thử lại…');
+    else if(['network','server-error','socket-error','socket-closed'].indexOf(e.type)>=0)retryPeer('Mất kết nối máy chủ ghép cặp, đang thử lại…');
+    else if(e.type!=='peer-unavailable')setSt('dotS','stS','bad','Lỗi: '+(e.type||e.message));
+  });
+}
+
+function setLiveUI(on){
+  $('btnGo').classList.toggle('live',on);
+  $('btnStart').textContent=on?'Dừng truyền':'Bắt đầu truyền';
+  $('btnStart').classList.toggle('stop',on);
+  $('liveBadge').classList.toggle('on',on);
+  $('phSend').hidden=on;
+  $('hudSend').classList.toggle('on',on);
+  renderSlots();
+}
+function wake(){try{if('wakeLock' in navigator)navigator.wakeLock.request('screen').then(function(l){S.wl=l}).catch(function(){})}catch(e){}}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&S.active)wake()});
+
+function startSend(){
+  if(S.active||S.starting)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    setSt('dotS','stS','bad','Trình duyệt chưa cho dùng camera. Hãy mở trang bằng HTTPS.');return;
+  }
+  S.starting=true;renderSlots();
+  $('btnStart').disabled=true;$('btnGo').disabled=true;
+  setSt('dotS','stS','','Đang xin quyền truy cập camera…');
+  getVideo($('cam').value).then(function(t){
+    S.vtrack=t;applyHint(t);
+    if($('aud').value==='1'){
+      return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})
+        .then(function(a){S.atrack=a.getAudioTracks()[0]}).catch(function(){toast('Không bật được micro, vẫn phát hình')});
+    }
+  }).then(function(){
+    buildStream();S.active=true;
+    setLiveUI(true);refreshCams();wake();openPeer();
+    S.statT=setInterval(senderStats,1000);
+    S.metaT=setInterval(broadcastMeta,5000);
+  }).catch(function(e){
+    var m=e&&e.name==='NotAllowedError'?'Bạn đã từ chối quyền camera. Hãy cho phép rồi thử lại.':
+          e&&e.name==='NotFoundError'?'Không tìm thấy camera.':
+          e&&e.name==='NotReadableError'?'Camera đang được ứng dụng khác sử dụng.':
+          'Không bật được camera ('+((e&&e.name)||'lỗi')+').';
+    setSt('dotS','stS','bad',m);
+  }).then(function(){
+    S.starting=false;$('btnStart').disabled=false;$('btnGo').disabled=false;renderSlots();
+  });
+}
+function stopSend(){
+  S.active=false;
+  clearInterval(S.statT);clearInterval(S.metaT);clearTimeout(S.rt);
+  Object.keys(S.calls).forEach(function(k){try{S.calls[k].close()}catch(e){}});
+  Object.keys(S.conns).forEach(function(k){try{S.conns[k].close()}catch(e){}});
+  S.calls={};S.conns={};
+  if(S.peer){try{S.peer.destroy()}catch(e){}S.peer=null}
+  if(S.stream)S.stream.getTracks().forEach(function(t){t.onended=null;t.stop()});
+  S.stream=null;S.vtrack=null;S.atrack=null;S.lastT=0;
+  try{if(S.wl)S.wl.release()}catch(e){}S.wl=null;
+  $('local').srcObject=null;
+  setLiveUI(false);updViewers();$('warn').classList.remove('on');
+  setSt('dotS','stS','','Đã dừng');
+}
+function toggleSend(){if(S.active)stopSend();else startSend()}
+$('btnStart').onclick=toggleSend;$('btnGo').onclick=toggleSend;
+
+function senderStats(){
+  var t=S.vtrack;if(!t)return;
+  var s=t.getSettings(),capFps=Math.round(s.frameRate||0),req=+$('fps').value;
+  var line1='Camera: '+(s.width||'?')+'×'+(s.height||'?')+' · '+capFps+' fps';
+  var ids=Object.keys(S.calls),call=ids.length?S.calls[ids[0]]:null;
+  var warns=[];
+  if(capFps&&capFps<req-3)warns.push('Camera chỉ quay '+capFps+' fps (đã yêu cầu '+req+'). Thiếu sáng làm điện thoại tự hạ fps, hoặc camera không hỗ trợ '+req+' fps ở độ phân giải này.');
+  var wantW=+$('res').value.split('x')[0];
+  if(s.width&&s.width<wantW*0.9)warns.push('Camera chỉ cho '+s.width+'×'+s.height+' thay vì '+$('res').value.replace('x','×')+'.');
+  var show=function(l2){$('hudSend').textContent=l2?line1+'\n'+l2:line1;$('warn').textContent=warns.join(' ');$('warn').classList.toggle('on',warns.length>0)};
+  if(!call||!call.peerConnection){show('');return}
+  call.peerConnection.getStats().then(function(rep){
+    var l2='';
+    rep.forEach(function(r){
+      if(r.type==='outbound-rtp'&&r.kind==='video'&&!r.isRemote){
+        var mb=null;if(S.lastT&&r.timestamp>S.lastT&&S.lastCallId===ids[0])mb=(r.bytesSent-S.lastB)*8/((r.timestamp-S.lastT)/1000)/1e6;
+        S.lastB=r.bytesSent;S.lastT=r.timestamp;S.lastCallId=ids[0];
+        l2='Gửi: '+(r.frameWidth||'?')+'×'+(r.frameHeight||'?')+' · '+Math.round(r.framesPerSecond||0)+' fps'+(mb!==null?' · '+mb.toFixed(1)+' Mbps':'');
+        var q=r.qualityLimitationReason;
+        if(q&&q!=='none'){
+          l2+='\nBị giới hạn do '+(q==='bandwidth'?'băng thông':q==='cpu'?'CPU':q);
+          warns.push(q==='bandwidth'?'Mạng đang là điểm nghẽn. Hãy dùng Wi-Fi 5 GHz hoặc cáp mạng, hoặc tăng băng thông tối đa.':q==='cpu'?'Máy phát quá tải CPU. Thử giảm xuống 720p hoặc 30 fps.':'');
+        }
+      }
+    });
+    show(l2);
+  }).catch(function(){show('')});
+}
+
+/* =====================================================
+   BÊN NHẬN (4 camera)
+   ===================================================== */
+var R={peer:null,slots:[],timer:null,statT:null,focus:0,restart:null};
+var STATE_TXT={offline:'Offline',connecting:'Đang kết nối…',live:'Trực tiếp'};
+
+function buildTiles(){
+  var wrap=$('tiles'),h='';
+  for(var n=1;n<=4;n++){
+    h+='<div class="tile" data-n="'+n+'" data-state="offline">'+
+      '<video autoplay muted playsinline></video>'+
+      '<div class="ph"><div>CAM '+n+'<br><small>Chờ tín hiệu từ bên phát…</small></div></div>'+
+      '<div class="tag"><i></i>CAM '+n+' <em>Offline</em></div>'+
+      '<div class="hud"></div>'+
+      '<div class="tb"><button class="mb" aria-label="Bật tiếng CAM '+n+'">'+IC_MUTE+'</button><button class="fb" aria-label="Toàn màn hình CAM '+n+'">'+IC_FS+'</button></div>'+
+    '</div>';
+  }
+  wrap.innerHTML=h;
+  R.slots=[null];
+  for(var i=1;i<=4;i++){
+    var el=wrap.children[i-1];
+    R.slots.push({n:i,el:el,video:el.querySelector('video'),hud:el.querySelector('.hud'),em:el.querySelector('.tag em'),
+      state:'offline',conn:null,call:null,since:0,meta:null,lastB:0,lastT:0,stale:0});
+  }
+}
+buildTiles();
+$('tiles').addEventListener('click',function(e){
+  var tile=e.target.closest('.tile');if(!tile)return;
+  var s=R.slots[+tile.dataset.n];
+  var mb=e.target.closest('.mb'),fb=e.target.closest('.fb');
+  if(mb){s.video.muted=!s.video.muted;mb.innerHTML=s.video.muted?IC_MUTE:IC_SND;return}
+  if(fb){
+    if(document.fullscreenElement)document.exitFullscreen();
+    else if(tile.requestFullscreen)tile.requestFullscreen().catch(function(){});
+    else if(s.video.webkitEnterFullscreen)s.video.webkitEnterFullscreen();
+    return;
+  }
+  R.focus=(R.focus===s.n)?0:s.n;
+  $('tiles').classList.toggle('focus',R.focus>0);
+  R.slots.forEach(function(x){if(x)x.el.classList.toggle('big',x.n===R.focus)});
+});
+
+function setState(s,st){
+  s.state=st;s.el.dataset.state=st;s.em.textContent=STATE_TXT[st];
+  s.el.querySelector('.ph small').textContent=st==='connecting'?'Đang tìm camera phát…':'Chờ tín hiệu từ bên phát…';
+  summary();
+}
+function summary(){
+  var live=0;R.slots.forEach(function(s){if(s&&s.state==='live')live++});
+  $('dotW').className='dot '+(live?'ok':'');
+  $('sumW').textContent=live+'/4 camera đang trực tiếp'+(live?'':' · tự kết nối khi bên phát mở trang');
+}
+function dropSlot(s){
+  try{if(s.call)s.call.close()}catch(e){}
+  try{if(s.conn)s.conn.close()}catch(e){}
+  s.call=null;s.conn=null;s.video.srcObject=null;s.hud.textContent='';s.lastT=0;s.stale=0;
+  setState(s,'offline');
+}
+function slotOf(peerId){
+  var pre='lc-'+channel+'-';
+  if(peerId.indexOf(pre)!==0)return 0;
+  var n=parseInt(peerId.slice(pre.length),10);
+  return (n>=1&&n<=4)?n:0;
+}
+function tick(){
+  if(!R.peer||!R.peer.open)return;
+  var now=Date.now();
+  R.slots.forEach(function(s){
+    if(!s||s.state==='live')return;
+    if(s.state==='connecting'&&now-s.since<8000)return;
+    try{if(s.conn)s.conn.close()}catch(e){}
+    var conn=R.peer.connect(pid(s.n),{reliable:true});
+    s.conn=conn;s.since=now;
+    if(s.state!=='connecting')setState(s,'connecting');
+    conn.on('data',function(d){if(d&&d.t==='meta'){s.meta=d}});
+    conn.on('close',function(){if(s.conn===conn)dropSlot(s)});
+    conn.on('error',function(){});
+  });
+}
+function onCall(s,call){
+  if(s.call&&s.call!==call){try{s.call.close()}catch(e){}}
+  s.call=call;call.answer();
+  call.on('stream',function(st){
+    s.video.srcObject=st;s.video.play().catch(function(){});
+    s.lastB=0;s.lastT=0;s.stale=0;setState(s,'live');
+  });
+  call.on('close',function(){if(s.call===call)dropSlot(s)});
+  call.on('error',function(){if(s.call===call)dropSlot(s)});
+}
+function startWatch(){
+  if(R.peer)return;
+  var p=new Peer({debug:0});R.peer=p;
+  p.on('open',function(){
+    tick();clearInterval(R.timer);R.timer=setInterval(tick,2500);
+    clearInterval(R.statT);R.statT=setInterval(pollStats,1000);
+  });
+  p.on('call',function(call){var n=slotOf(call.peer);if(!n){call.close();return}onCall(R.slots[n],call)});
+  p.on('disconnected',function(){try{p.reconnect()}catch(e){}});
+  p.on('error',function(e){
+    if(e.type==='peer-unavailable'){
+      var m=/lc-[a-z0-9]+-(\d)/.exec(e.message||'');
+      if(m){var s=R.slots[+m[1]];if(s&&!s.call)setState(s,'offline')}
+      return;
+    }
+    restartWatch(3000);
+  });
+  summary();
+}
+function stopWatch(){
+  clearInterval(R.timer);clearInterval(R.statT);clearTimeout(R.restart);
+  R.slots.forEach(function(s){if(s)dropSlot(s)});
+  if(R.peer){try{R.peer.destroy()}catch(e){}R.peer=null}
+  $('rtt').textContent='';
+}
+function restartWatch(delay){
+  stopWatch();
+  R.restart=setTimeout(function(){if(!$('viewWatch').hidden)startWatch()},delay||200);
+}
+function pollStats(){
+  var rttDone=false;
+  R.slots.forEach(function(s){
+    if(!s||s.state!=='live'||!s.call||!s.call.peerConnection)return;
+    s.call.peerConnection.getStats().then(function(rep){
+      var w=0,h=0,fps=0,bytes=0,ts=0,drop=0,rtt=null;
+      rep.forEach(function(r){
+        if(r.type==='inbound-rtp'&&r.kind==='video'){w=r.frameWidth||0;h=r.frameHeight||0;fps=r.framesPerSecond||0;bytes=r.bytesReceived||0;ts=r.timestamp;drop=r.framesDropped||0}
+        if(r.type==='candidate-pair'&&r.nominated&&r.state==='succeeded'&&r.currentRoundTripTime!=null)rtt=r.currentRoundTripTime;
+      });
+      var mb=null;if(s.lastT&&ts>s.lastT)mb=(bytes-s.lastB)*8/((ts-s.lastT)/1000)/1e6;
+      if(s.lastT&&bytes===s.lastB)s.stale++;else s.stale=0;
+      s.lastB=bytes;s.lastT=ts;
+      if(s.stale>=6){dropSlot(s);return}
+      var target=s.meta&&s.meta.fps?s.meta.fps:0;
+      var l1=(w?w+'×'+h:'…')+' · '+Math.round(fps)+(target?'/'+target:'')+' fps'+(mb!==null?' · '+mb.toFixed(1)+' Mbps':'');
+      var l2=s.meta&&s.meta.w?'Gửi: '+s.meta.w+'×'+s.meta.h+' · '+s.meta.fps+' fps':'';
+      s.hud.textContent=l2?l1+'\n'+l2:l1;
+      s.hud.classList.toggle('low',!!(target&&fps&&fps<target*0.9));
+      if(rtt!==null&&!rttDone){rttDone=true;$('rtt').textContent='Độ trễ mạng ~'+Math.round(rtt*1000)+' ms'}
+    }).catch(function(){});
+  });
+}
+
+/* =====================================================
+   Kênh, tab, khởi động
+   ===================================================== */
+$('ch').addEventListener('change',function(){
+  channel=clean($('ch').value)||DEFAULT_CH;$('ch').value=channel;store.set('ch',channel);
+  renderLinks();
+  if(!$('viewWatch').hidden)restartWatch(200);
+  if(S.active)toast('Kênh mới sẽ áp dụng khi bạn dừng rồi bắt đầu lại');
+});
+function setTab(w){
+  var send=w==='send';
+  $('viewSend').hidden=!send;$('viewWatch').hidden=send;
+  $('tabSend').setAttribute('aria-selected',String(send));
+  $('tabWatch').setAttribute('aria-selected',String(!send));
+  store.set('role',w);
+  if(send)stopWatch();else startWatch();
+}
+$('tabSend').onclick=function(){setTab('send')};
+$('tabWatch').onclick=function(){setTab('watch')};
+
+renderLinks();
+var role=params.get('role')||store.get('role','send');
+setTab(role==='watch'?'watch':'send');
+refreshCams();
+if(role!=='watch'&&(params.get('auto')==='1'||store.get('auto','0')==='1'))startSend();
+
+window.addEventListener('pagehide',function(){try{stopSend();stopWatch()}catch(e){}});
+})();
+</script>
+</body>
+</html>
