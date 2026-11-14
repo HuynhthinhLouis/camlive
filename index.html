@@ -106,6 +106,7 @@ select:focus-visible,input:focus-visible,button:focus-visible,summary:focus-visi
 .lrow{display:flex;gap:8px;align-items:center;margin-top:8px}
 .lrow b{font-size:12px;width:48px;flex:none}
 .lrow input{font-family:var(--mono);font-size:11.5px}
+.log{margin:10px 0 0;max-height:220px;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--mut);background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(20,24,34,.95);border:1px solid var(--line);padding:10px 16px;border-radius:12px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;max-width:90vw}
 .toast.on{opacity:1}
 [hidden]{display:none!important}
@@ -186,6 +187,11 @@ select:focus-visible,input:focus-visible,button:focus-visible,summary:focus-visi
       <div id="sendLinks"></div>
     </details>
   </main>
+  <details class="panel links">
+    <summary>Nhật ký kết nối (dùng khi cần tìm lỗi)</summary>
+    <pre id="log" class="log">Chưa có sự kiện.</pre>
+    <button class="btn ghost" id="btnCopyLog" style="margin-top:10px">Chép nhật ký</button>
+  </details>
 </div>
 <div class="toast" id="toast" role="status"></div>
 
@@ -216,6 +222,43 @@ function copyText(text,btn){
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(fb)}else fb();
 }
 function setSt(dot,txt,cls,msg){$(dot).className='dot '+(cls||'');$(txt).textContent=msg}
+
+/* ---------- nhật ký + cấu hình đường truyền ---------- */
+var logBuf=[];
+function log(m){
+  var line=new Date().toTimeString().slice(0,8)+' '+m;
+  logBuf.push(line);if(logBuf.length>200)logBuf.shift();
+  var el=$('log');if(el){el.textContent=logBuf.join('\n');el.scrollTop=el.scrollHeight}
+}
+$('btnCopyLog').onclick=function(){copyText(logBuf.join('\n'),$('btnCopyLog'))};
+var ICE=[
+  {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']},
+  {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+];
+function peerOpts(){return {debug:0,config:{iceServers:ICE,sdpSemantics:'unified-plan'}}}
+function watchPc(label,call,onFail){
+  var pc=call.peerConnection;
+  if(!pc){log(label+': chưa tạo được kênh WebRTC');return}
+  pc.addEventListener('iceconnectionstatechange',function(){
+    var st=pc.iceConnectionState;log(label+' ICE: '+st);
+    if(st==='connected'||st==='completed'){
+      pc.getStats().then(function(rep){
+        var cands={},pair=null;
+        rep.forEach(function(r){
+          if(r.type==='local-candidate'||r.type==='remote-candidate')cands[r.id]=r;
+          if(r.type==='candidate-pair'&&r.nominated&&r.state==='succeeded')pair=r;
+        });
+        if(pair){
+          var l=cands[pair.localCandidateId],r2=cands[pair.remoteCandidateId];
+          var t=(l&&l.candidateType)||'?',u=(r2&&r2.candidateType)||'?';
+          log(label+' đường truyền: '+t+' ↔ '+u+((t==='relay'||u==='relay')?' (đi vòng qua máy chủ TURN, có thể bị giới hạn tốc độ)':' (trực tiếp)'));
+        }
+      }).catch(function(){});
+    }
+    if(st==='failed'){log(label+': không thể mở đường truyền (NAT hoặc tường lửa chặn)');if(onFail)onFail()}
+  });
+}
 
 /* ---------- cài đặt được nhớ ---------- */
 ['res','fps','br','prio','aud'].forEach(function(id){
@@ -374,8 +417,10 @@ function onViewer(conn){
   if(S.calls[vid]){try{S.calls[vid].close()}catch(e){}delete S.calls[vid]}
   S.conns[vid]=conn;
   if(!S.stream||!S.peer)return;
+  log('Phát: bên nhận '+vid.slice(0,8)+' đã kết nối, bắt đầu gửi hình');
   var call=S.peer.call(vid,S.stream);
   S.calls[vid]=call;
+  watchPc('Phát→'+vid.slice(0,6),call,function(){setSt('dotS','stS','bad','Không mở được đường truyền tới bên nhận. Thử đổi mạng (Wi-Fi/4G).')});
   var end=function(){if(S.calls[vid]===call){delete S.calls[vid];updViewers()}};
   call.on('close',end);call.on('error',end);
   tuneSender(call);
@@ -400,8 +445,9 @@ function retryPeer(msg){
   S.rt=setTimeout(function(){if(S.active&&!S.peer)openPeer()},3000);
 }
 function openPeer(){
-  var p=new Peer(pid(S.slot),{debug:0});S.peer=p;
-  p.on('open',function(){setSt('dotS','stS','ok','Đang phát CAM '+S.slot+', chờ bên nhận…')});
+  if(!window.Peer){log('LỖI: chưa có thư viện PeerJS');setSt('dotS','stS','bad','Không tải được thư viện kết nối. Kiểm tra mạng.');return}
+  var p=new Peer(pid(S.slot),peerOpts());S.peer=p;
+  p.on('open',function(id){log('Phát: đã đăng ký '+id+' trên máy chủ ghép cặp');setSt('dotS','stS','ok','Đang phát CAM '+S.slot+', chờ bên nhận…')});
   p.on('connection',function(conn){
     conn.on('open',function(){onViewer(conn)});
     conn.on('close',function(){dropViewer(conn)});
@@ -409,6 +455,7 @@ function openPeer(){
   });
   p.on('disconnected',function(){try{p.reconnect()}catch(e){}});
   p.on('error',function(e){
+    log('Phát lỗi: '+e.type+' '+(e.message||''));
     if(e.type==='unavailable-id')retryPeer('CAM '+S.slot+' đang bị thiết bị khác giữ chỗ, đang thử lại…');
     else if(['network','server-error','socket-error','socket-closed'].indexOf(e.type)>=0)retryPeer('Mất kết nối máy chủ ghép cặp, đang thử lại…');
     else if(e.type!=='peer-unavailable')setSt('dotS','stS','bad','Lỗi: '+(e.type||e.message));
@@ -571,10 +618,14 @@ function tick(){
   var now=Date.now();
   R.slots.forEach(function(s){
     if(!s||s.state==='live')return;
-    if(s.state==='connecting'&&now-s.since<8000)return;
+    var limit=(s.conn&&s.conn.open)?25000:8000;
+    if(s.state==='connecting'&&now-s.since<limit)return;
     try{if(s.conn)s.conn.close()}catch(e){}
+    s.tries=(s.tries||0)+1;
+    if(s.tries===1||s.tries%8===0)log('Nhận: đang tìm CAM '+s.n+' (lần '+s.tries+')'+(s.tries>1?', chưa thấy bên phát':''));
     var conn=R.peer.connect(pid(s.n),{reliable:true});
     s.conn=conn;s.since=now;
+    conn.on('open',function(){log('Nhận: đã thấy CAM '+s.n+', chờ hình…')});
     if(s.state!=='connecting')setState(s,'connecting');
     conn.on('data',function(d){if(d&&d.t==='meta'){s.meta=d}});
     conn.on('close',function(){if(s.conn===conn)dropSlot(s)});
@@ -584,7 +635,10 @@ function tick(){
 function onCall(s,call){
   if(s.call&&s.call!==call){try{s.call.close()}catch(e){}}
   s.call=call;call.answer();
+  log('Nhận: CAM '+s.n+' bắt đầu gửi hình');
+  watchPc('Nhận CAM '+s.n,call,function(){if(s.call===call)dropSlot(s)});
   call.on('stream',function(st){
+    log('Nhận: CAM '+s.n+' đã có hình');s.tries=0;
     s.video.srcObject=st;s.video.play().catch(function(){});
     s.lastB=0;s.lastT=0;s.stale=0;setState(s,'live');
   });
@@ -593,14 +647,17 @@ function onCall(s,call){
 }
 function startWatch(){
   if(R.peer)return;
-  var p=new Peer({debug:0});R.peer=p;
-  p.on('open',function(){
+  if(!window.Peer){log('LỖI: chưa có thư viện PeerJS');$('sumW').textContent='Không tải được thư viện kết nối. Kiểm tra mạng.';return}
+  var p=new Peer(peerOpts());R.peer=p;
+  p.on('open',function(id){
+    log('Nhận: đã đăng ký '+id+' trên máy chủ ghép cặp, kênh '+channel);
     tick();clearInterval(R.timer);R.timer=setInterval(tick,2500);
     clearInterval(R.statT);R.statT=setInterval(pollStats,1000);
   });
   p.on('call',function(call){var n=slotOf(call.peer);if(!n){call.close();return}onCall(R.slots[n],call)});
   p.on('disconnected',function(){try{p.reconnect()}catch(e){}});
   p.on('error',function(e){
+    if(e.type!=='peer-unavailable')log('Nhận lỗi: '+e.type+' '+(e.message||''));
     if(e.type==='peer-unavailable'){
       var m=/lc-[a-z0-9]+-(\d)/.exec(e.message||'');
       if(m){var s=R.slots[+m[1]];if(s&&!s.call)setState(s,'offline')}
@@ -664,11 +721,23 @@ function setTab(w){
 $('tabSend').onclick=function(){setTab('send')};
 $('tabWatch').onclick=function(){setTab('watch')};
 
-renderLinks();
-var role=params.get('role')||store.get('role','send');
-setTab(role==='watch'?'watch':'send');
-refreshCams();
-if(role!=='watch'&&(params.get('auto')==='1'||store.get('auto','0')==='1'))startSend();
+function boot(){
+  renderLinks();
+  var role=params.get('role')||store.get('role','send');
+  setTab(role==='watch'?'watch':'send');
+  refreshCams();
+  if(role!=='watch'&&(params.get('auto')==='1'||store.get('auto','0')==='1'))startSend();
+}
+function ensurePeer(cb){
+  if(window.Peer){log('Đã tải thư viện PeerJS');cb();return}
+  log('Không tải được PeerJS từ unpkg, thử jsdelivr…');
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+  s.onload=function(){log('Đã tải PeerJS từ jsdelivr');cb()};
+  s.onerror=function(){log('LỖI: không tải được PeerJS từ cả hai nguồn');cb()};
+  document.head.appendChild(s);
+}
+ensurePeer(boot);
 
 window.addEventListener('pagehide',function(){try{stopSend();stopWatch()}catch(e){}});
 })();
