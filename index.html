@@ -210,6 +210,12 @@ select:focus-visible,input:focus-visible,button:focus-visible,summary:focus-visi
 'use strict';
 var $=function(i){return document.getElementById(i)};
 var DEFAULT_CH='r3n8k5w2xq7d';   /* đổi chuỗi này thành mã riêng của bạn */
+/* TURN tự động: điền MỘT LẦN ở đây, mọi thiết bị mở file sẽ tự dùng, không cần nhập gì thêm.
+   Cách 1 (khuyên dùng, Metered): meteredApp là tên app (phần trước .metered.live), meteredKey là API key.
+   Cách 2: điền thẳng urls (nhiều địa chỉ cách nhau bằng dấu phẩy), user, pass. */
+var TURN_CONFIG={cfKeyId:'55d7508ce75d5a0e5f7454db59fc5f71',cfToken:'de7bf1786f8a86feee45ad18491279cfcce254f735b6ee9be5fb7cd5b588a02e',workerUrl:'',workerKey:'',meteredApp:'',meteredKey:'',urls:'',user:'',pass:''};
+/* Cloudflare gọi thẳng từ file này (dự án cá nhân): cfKeyId là Key ID, cfToken là API token của TURN key. */
+/* Cách Cloudflare (khuyên dùng): workerUrl là địa chỉ Worker (https://...workers.dev), workerKey là mật khẩu PASSCODE của Worker. */
 var store={
   get:function(k,d){try{var v=localStorage.getItem('lc_'+k);return v===null?d:v}catch(e){return d}},
   set:function(k,v){try{localStorage.setItem('lc_'+k,v)}catch(e){}}
@@ -248,7 +254,44 @@ var ICE=[
 function iceList(){
   var list=[],u=(store.get('turnUrl','')||'').split(',').map(function(x){return x.trim()}).filter(Boolean);
   if(u.length)list.push({urls:u,username:store.get('turnUser',''),credential:store.get('turnPass','')});
-  return list.concat(ICE);
+  var cu=(TURN_CONFIG.urls||'').split(',').map(function(x){return x.trim()}).filter(Boolean);
+  if(cu.length)list.push({urls:cu,username:TURN_CONFIG.user,credential:TURN_CONFIG.pass});
+  return list.concat(fetchedIce,ICE);
+}
+var fetchedIce=[];
+function loadCf(){
+  var ctl=new AbortController(),t=setTimeout(function(){ctl.abort()},8000);
+  return fetch('https://rtc.live.cloudflare.com/v1/turn/keys/'+encodeURIComponent(TURN_CONFIG.cfKeyId)+'/credentials/generate',{
+    method:'POST',signal:ctl.signal,
+    headers:{'Authorization':'Bearer '+TURN_CONFIG.cfToken,'Content-Type':'application/json'},
+    body:JSON.stringify({ttl:86400})
+  }).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+  .then(function(d){
+    var s=d&&d.iceServers;if(!s)throw new Error('phản hồi không đúng dạng');
+    var urls=(s.urls||[]).filter(function(u){return !/:53(\?|$)/.test(u)});
+    fetchedIce=[{urls:urls,username:s.username,credential:s.credential}];
+    log('Đã lấy TURN Cloudflare trực tiếp');
+  }).catch(function(e){
+    log('Không lấy được TURN Cloudflare từ trình duyệt: '+e.message+' (nếu là lỗi mạng hoặc CORS, hãy dùng Worker hoặc điền TURN tĩnh)');
+  }).then(function(){clearTimeout(t)});
+}
+function loadIce(){
+  if(TURN_CONFIG.cfKeyId&&TURN_CONFIG.cfToken)return loadCf();
+  var url='';
+  if(window.__LC_WORKER__)url=location.origin+'/turn?k='+encodeURIComponent(params.get('k')||'');
+  else if(TURN_CONFIG.workerUrl)url=TURN_CONFIG.workerUrl+(TURN_CONFIG.workerKey?(TURN_CONFIG.workerUrl.indexOf('?')<0?'?':'&')+'k='+encodeURIComponent(TURN_CONFIG.workerKey):'');
+  else if(TURN_CONFIG.meteredApp&&TURN_CONFIG.meteredKey)url='https://'+TURN_CONFIG.meteredApp+'.metered.live/api/v1/turn/credentials?apiKey='+encodeURIComponent(TURN_CONFIG.meteredKey);
+  if(!url)return Promise.resolve();
+  var ctl=new AbortController(),t=setTimeout(function(){ctl.abort()},6000);
+  return fetch(url,{signal:ctl.signal,cache:'no-store'})
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})
+    .then(function(a){
+      var list=Array.isArray(a)?a:(a&&a.iceServers?[].concat(a.iceServers):null);
+      if(list&&list.length){fetchedIce=list;log('Đã lấy TURN tự động ('+list.length+' nhóm máy chủ)')}
+      else log('Máy chủ cấp TURN trả về dữ liệu không đúng dạng');
+    })
+    .catch(function(e){log('Không lấy được TURN tự động: '+e.message)})
+    .then(function(){clearTimeout(t)});
 }
 function peerOpts(){return {debug:0,config:{iceServers:iceList(),sdpSemantics:'unified-plan'}}}
 ['turnUrl','turnUser','turnPass'].forEach(function(id){
@@ -318,15 +361,16 @@ $('slots').addEventListener('click',function(e){
 });
 renderSlots();
 
+function kq(){var k=params.get('k');return k?'&k='+encodeURIComponent(k):''}
 function renderLinks(){
-  $('rxLink').value=base+'?role=watch&ch='+channel;
+  $('rxLink').value=base+'?role=watch&ch='+channel+kq();
   var h='';
-  for(var n=1;n<=4;n++){h+='<div class="lrow"><b>CAM '+n+'</b><input readonly value="'+esc(base+'?role=send&cam='+n+'&ch='+channel)+'" aria-label="Liên kết CAM '+n+'"><button class="btn ghost" data-copy="'+n+'">Chép</button></div>'}
+  for(var n=1;n<=4;n++){h+='<div class="lrow"><b>CAM '+n+'</b><input readonly value="'+esc(base+'?role=send&cam='+n+'&ch='+channel+kq())+'" aria-label="Liên kết CAM '+n+'"><button class="btn ghost" data-copy="'+n+'">Chép</button></div>'}
   $('sendLinks').innerHTML=h;
 }
 $('sendLinks').addEventListener('click',function(e){
   var b=e.target.closest('button[data-copy]');if(!b)return;
-  copyText(base+'?role=send&cam='+b.dataset.copy+'&ch='+channel,b);
+  copyText(base+'?role=send&cam='+b.dataset.copy+'&ch='+channel+kq(),b);
 });
 $('btnCopyRx').onclick=function(){copyText($('rxLink').value,$('btnCopyRx'))};
 
@@ -764,7 +808,7 @@ function ensurePeer(cb){
   s.onerror=function(){log('LỖI: không tải được PeerJS từ cả hai nguồn');cb()};
   document.head.appendChild(s);
 }
-ensurePeer(boot);
+ensurePeer(function(){loadIce().then(boot)});
 
 window.addEventListener('pagehide',function(){try{stopSend();stopWatch()}catch(e){}});
 })();
