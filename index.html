@@ -188,6 +188,15 @@ select:focus-visible,input:focus-visible,button:focus-visible,summary:focus-visi
     </details>
   </main>
   <details class="panel links">
+    <summary>Máy chủ TURN riêng (khi điện thoại và máy tính ở khác mạng không nối được)</summary>
+    <div class="note" style="margin:8px 0">Nhập cho cả bên phát và bên nhận. Lấy miễn phí tại metered.ca (mục TURN Server) hoặc Cloudflare Calls. Nhiều địa chỉ cách nhau bằng dấu phẩy. Sau khi lưu, hãy dừng rồi bắt đầu lại cả hai bên.</div>
+    <label>Địa chỉ<input id="turnUrl" placeholder="turn:ten-may-chu:443?transport=tcp, turn:ten-may-chu:3478" autocomplete="off" spellcheck="false"></label>
+    <div class="row" style="margin-top:8px">
+      <label>Tên đăng nhập<input id="turnUser" autocomplete="off" spellcheck="false"></label>
+      <label>Mật khẩu<input id="turnPass" autocomplete="off" spellcheck="false"></label>
+    </div>
+  </details>
+  <details class="panel links">
     <summary>Nhật ký kết nối (dùng khi cần tìm lỗi)</summary>
     <pre id="log" class="log">Chưa có sự kiện.</pre>
     <button class="btn ghost" id="btnCopyLog" style="margin-top:10px">Chép nhật ký</button>
@@ -236,10 +245,28 @@ var ICE=[
   {urls:['turn:eu-0.turn.peerjs.com:3478','turn:us-0.turn.peerjs.com:3478'],username:'peerjs',credential:'peerjsp'},
   {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
 ];
-function peerOpts(){return {debug:0,config:{iceServers:ICE,sdpSemantics:'unified-plan'}}}
+function iceList(){
+  var list=[],u=(store.get('turnUrl','')||'').split(',').map(function(x){return x.trim()}).filter(Boolean);
+  if(u.length)list.push({urls:u,username:store.get('turnUser',''),credential:store.get('turnPass','')});
+  return list.concat(ICE);
+}
+function peerOpts(){return {debug:0,config:{iceServers:iceList(),sdpSemantics:'unified-plan'}}}
+['turnUrl','turnUser','turnPass'].forEach(function(id){
+  var el=$(id);el.value=store.get(id,'');
+  el.addEventListener('change',function(){store.set(id,el.value.trim());toast('Đã lưu. Hãy dừng rồi bắt đầu lại cả hai bên.')});
+});
 function watchPc(label,call,onFail){
   var pc=call.peerConnection;
   if(!pc){log(label+': chưa tạo được kênh WebRTC');return}
+  var cnt={host:0,srflx:0,relay:0};
+  pc.addEventListener('icecandidate',function(e){
+    if(e.candidate){
+      var m=/ typ (\w+)/.exec(e.candidate.candidate||'');
+      if(m&&cnt[m[1]]!==undefined)cnt[m[1]]++;
+    }else{
+      log(label+' ứng viên mạng: host '+cnt.host+', srflx '+cnt.srflx+', relay '+cnt.relay+(cnt.relay?'':' (không có relay: máy chủ TURN không dùng được, hãy nhập TURN riêng)'));
+    }
+  });
   pc.addEventListener('iceconnectionstatechange',function(){
     var st=pc.iceConnectionState;log(label+' ICE: '+st);
     if(st==='connected'||st==='completed'){
